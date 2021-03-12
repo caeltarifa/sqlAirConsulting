@@ -64,3 +64,39 @@ order by t1.idnotam desc
 
 ##########################################################################################################################################
 
+					    
+					    
+					    
+/*--DE AQUI EN ADELANTE SE REALIZA PARA QUE BUSQUE DEL NOTAM NUEVO AL NOTAM CANCELADO--*/
+
+#####################################################################################################
+--CHARLIE-----BUSCAR NOTAM DE REEMPLAZO A PARTIR DEL NOTAM NUEVO
+
+create or replace function charlie_buscar_from_notamn_to_notamr(var_notamn varchar)returns varchar as $$
+	declare cadena varchar;
+	begin
+		var_notamn = split_part(var_notamn,' ',1);
+		var_notamn = substring(var_notamn,2);
+		cadena := (
+		select distinct t2.idnotam 
+		from 
+			(select 
+				 distinct pac.idnotam, split_part(pac.idnotam,' ',3) as var_idnotam
+			 from 
+				 plan_vuelo_notam_trafico_charly_repla pac
+			)as t2
+		where
+		t2.var_idnotam like var_notamn || '%'
+		);
+		if cadena is null 
+		then 
+			return '';
+		else
+			return cadena;
+		end if;
+	end
+$$ language plpgsql;
+
+select charlie_buscar_from_notamn_to_notamr('(C9990/21 NOTAMN');
+
+#####################################################################################################
