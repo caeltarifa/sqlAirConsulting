@@ -65,11 +65,12 @@ order by t1.idnotam desc
 ##########################################################################################################################################
 
 					    
+
 					    
 					    
 /*--DE AQUI EN ADELANTE SE REALIZA PARA QUE BUSQUE DEL NOTAM NUEVO AL NOTAM CANCELADO--*/
 
-#####################################################################################################
+##########################################################################################################################################
 --CHARLIE-----BUSCAR NOTAM DE REEMPLAZO A PARTIR DEL NOTAM NUEVO
 
 create or replace function charlie_buscar_from_notamn_to_notamr(var_notamn varchar)returns varchar as $$
@@ -99,4 +100,885 @@ $$ language plpgsql;
 
 select charlie_buscar_from_notamn_to_notamr('(C9990/21 NOTAMN');
 
-#####################################################################################################
+##########################################################################################################################################
+
+
+
+##########################################################################################################################################
+--CHARLIE-----BUSCAR NOTAM DE REEMPLAZO A PARTIR DE UN NOTAM DE REEMPLAZO
+
+create or replace function charlie_buscar_from_notamr_to_notamr(var_notamr varchar)returns varchar as $$
+	declare cadena varchar;
+	begin
+		var_notamr = split_part(var_notamr,' ',1);
+		var_notamr = substring(var_notamr,2);
+		cadena := (
+		select distinct t3.idnotam 
+		from 
+			(select 
+				 distinct pac.idnotam, split_part(pac.idnotam,' ',3) as var_idnotam
+			 from 
+				 plan_vuelo_notam_trafico_charly_repla pac
+			)as t3 
+		where
+		t3.var_idnotam like var_notamr || '%'
+		);
+		if cadena is null 
+		then 
+			return '';
+		else
+			return cadena;
+		end if;
+	end
+$$ language plpgsql;
+
+select charlie_buscar_from_notamr_to_notamr('(C9992/21 NOTAMR C9993/21');
+
+##########################################################################################################################################
+
+
+
+##########################################################################################################################################
+--CHARLIE-----BUSCAR NOTAM DE CANCELADO A PARTIR DEL NOTAM DE REEMPLAZO
+
+create or replace function charlie_buscar_from_notamr_to_notamc(var_notamr varchar)returns varchar as $$
+	declare cadena varchar;
+	begin
+		var_notamr = split_part(var_notamr,' ',1);
+		var_notamr = substring(var_notamr,2);
+		
+		cadena := (
+		select distinct t1.idnotam 
+		from 
+			(select 
+				 distinct pac.idnotam, split_part(pac.idnotam,' ',3) as var_idnotam
+			 from 
+				 plan_vuelo_notam_trafico_charly_cancel pac
+			)as t1 
+		where
+		t1.var_idnotam like var_notamr || '%'
+		);
+		if cadena is null 
+		then 
+			return '';
+		else
+			return cadena;
+		end if;
+	end
+$$ language plpgsql;
+
+select charlie_buscar_from_notamr_to_notamc('(C9994/21 NOTAMR C9993/21');
+
+##########################################################################################################################################
+
+
+
+##########################################################################################################################################
+--CHARLIE-----BUSCAR NOTAM DE CANCELADO A PARTIR DEL NOTAM NUEVO
+
+create or replace function charlie_buscar_from_notamn_to_notamc(var_notamn varchar)returns varchar as $$
+	declare cadena varchar;
+	begin
+		var_notamn = split_part(var_notamn,' ',1);
+		var_notamn = substring(var_notamn,2);
+		cadena := (
+		select distinct t1.idnotam 
+		from 
+			(select 
+				 distinct pac.idnotam, split_part(pac.idnotam,' ',3) as var_idnotam
+			 from 
+				 plan_vuelo_notam_trafico_charly_cancel pac
+			)as t1 
+		where
+		t1.var_idnotam like var_notamn || '%'
+		);
+		if cadena is null 
+		then 
+			return '';
+		else
+			return cadena;
+		end if;
+	end
+$$ language plpgsql;
+
+select charlie_buscar_from_notamn_to_notamc('(C0229/21 NOTAMN');
+
+##########################################################################################################################################
+
+
+
+##########################################################################################################################################
+--CHARLIE-----HISTORIAL DE CHARLIE A PARTIR DEL NOTAM NUEVO
+
+create or replace function charlie_historico_from_notamn(var_notamn varchar)returns varchar as $$
+	declare cadena varchar;
+	declare acumulador varchar;
+	declare reemplazo varchar;
+	begin
+		acumulador='';
+		if length(charlie_buscar_from_notamn_to_notamc(var_notamn) )> 0 
+		then
+			acumulador=concat(var_notamn,';',CAST(charlie_buscar_from_notamn_to_notamc(var_notamn) AS varchar),';');
+		else
+			if length(charlie_buscar_from_notamn_to_notamr(var_notamn)) > 0
+			then
+				reemplazo=cast(charlie_buscar_from_notamn_to_notamr(var_notamn) as varchar);
+				acumulador=concat(acumulador, reemplazo, ';');
+
+				
+				while length(charlie_buscar_from_notamr_to_notamr(reemplazo)) > 0
+				loop
+					reemplazo=cast(charlie_buscar_from_notamr_to_notamr(reemplazo) as varchar);
+					acumulador=concat(acumulador, reemplazo, ';');
+				end loop;		
+				
+				if length(charlie_buscar_from_notamr_to_notamc(reemplazo)) > 0
+				then
+					acumulador=concat(var_notamn,';',acumulador, CAST(charlie_buscar_from_notamr_to_notamc(reemplazo) AS varchar),';');
+				else
+					acumulador=concat(var_notamn,';',acumulador);
+				end if;
+			end if;
+			acumulador=concat(acumulador);
+		end if;
+		return acumulador;
+	end$$
+language plpgsql;
+
+select charlie_historico_from_notamn('(C0229/21 NOTAMN');--nuevo a cancelado
+select charlie_historico_from_notamn('(C0248/21 NOTAMN');--nuevo a reemplazo
+select charlie_historico_from_notamn('(C9990/21 NOTAMN');--nuevo a reemplazo a cancelado
+
+##########################################################################################################################################
+
+
+
+/*--DE AQUI EN ADELANTE SE REALIZA PARA QUE BUSQUE DEL NOTAM CANCELADO AL NOTAM NUEVO--*/
+##########################################################################################################################################
+--CHARLIE-----BUSCAR NOTAM NUEVO A PARTIR DEL NOTAM DE CANCELADO
+
+create or replace function charlie_buscar_from_notamc_to_notamn(var_notamc varchar)returns varchar as $$
+	declare cadena varchar;
+	begin
+		var_notamc = split_part(var_notamc,' ',3);
+		cadena := (
+		select distinct t1.idnotam 
+		from 
+			(select 
+				 distinct pac.idnotam, split_part(pac.idnotam,' ',1) as var_idnotam
+			 from 
+				 plan_vuelo_notam_trafico_charly_new pac
+			)as t1 
+		where
+		t1.var_idnotam like '%' || var_notamc || '%'
+		);
+		if cadena is null 
+		then 
+			return '';
+		else
+			return cadena;
+		end if;
+	end
+$$ language plpgsql;
+
+select charlie_buscar_from_notamc_to_notamn('(C0230/21 NOTAMC C0229/21');
+
+##########################################################################################################################################
+
+
+
+##########################################################################################################################################
+--CHARLIE-----BUSCAR NOTAM DE REEMPLAZO A PARTIR DEL NOTAM DE CANCELADO
+
+create or replace function charlie_buscar_from_notamc_to_notamr(var_notamr varchar)returns varchar as $$
+	declare cadena varchar;
+	begin
+		var_notamr = split_part(var_notamr,' ',3);
+		
+		cadena := (
+		select distinct t1.idnotam 
+		from 
+			(select 
+				 distinct pac.idnotam, split_part(pac.idnotam,' ',1) as var_idnotam
+			 from 
+				 plan_vuelo_notam_trafico_charly_repla pac
+			)as t1 
+		where
+		t1.var_idnotam like '%' || var_notamr || '%'
+		);
+		if cadena is null 
+		then 
+			return '';
+		else
+			return cadena;
+		end if;
+	end
+$$ language plpgsql;
+
+select charlie_buscar_from_notamc_to_notamr('(C9994/21 NOTAMR C9993/21');
+
+##########################################################################################################################################
+
+
+
+##########################################################################################################################################
+--CHARLIE-----BUSCAR NOTAM DE REEMPLAZO A PARTIR DEL NOTAM DE REEMPLAZO
+
+create or replace function charlie_buscar_from_notamre_to_notamre(var_notamr varchar)returns varchar as $$
+	declare cadena varchar;
+	begin
+		var_notamr = split_part(var_notamr,' ',3);
+		cadena := (
+		select distinct t3.idnotam 
+		from 
+			(select 
+				 distinct pac.idnotam, split_part(pac.idnotam,' ',1) as var_idnotam
+			 from 
+				 plan_vuelo_notam_trafico_charly_repla pac
+			)as t3 
+		where
+		t3.var_idnotam like '%' || var_notamr || '%'
+		);
+		if cadena is null 
+		then 
+			return '';
+		else
+			return cadena;
+		end if;
+	end
+$$ language plpgsql;
+
+select charlie_buscar_from_notamre_to_notamre('(C9993/21 NOTAMR C9992/21');
+
+##########################################################################################################################################
+
+
+
+##########################################################################################################################################
+----CHARLIE-----BUSCAR NOTAM NUEVO A PARTIR DEL NOTAM DE REEMPLAZO
+
+create or replace function charlie_buscar_from_notamr_to_notamn(var_notamn varchar)returns varchar as $$
+	declare cadena varchar;
+	begin
+		var_notamn = split_part(var_notamn,' ',3);
+		cadena := (
+		select distinct t2.idnotam 
+		from 
+			(select 
+				 distinct pac.idnotam, split_part(pac.idnotam,' ',1) as var_idnotam
+			 from 
+				 plan_vuelo_notam_trafico_charly_new pac
+			)as t2
+		where
+		t2.var_idnotam like '%' || var_notamn || '%'
+		);
+		if cadena is null 
+		then 
+			return '';
+		else
+			return cadena;
+		end if;
+	end
+$$ language plpgsql;
+
+select charlie_buscar_from_notamr_to_notamn('(C9991/21 NOTAMR C9990/21');
+
+##########################################################################################################################################
+
+
+
+
+##########################################################################################################################################
+--CHARLIE-----HISTORIAL DE CHARLIE A PARTIR DEL NOTAM DE CANCELADO
+
+create or replace function charlie_historico_from_notamc(var_notamn varchar)returns varchar as $$
+
+	declare cadena varchar;
+	declare acumulador varchar;
+	declare reemplazo varchar;
+	begin
+		acumulador='';
+		if length(charlie_buscar_from_notamc_to_notamn(var_notamn) )> 0 
+		then
+			acumulador=concat(var_notamn,';',CAST(charlie_buscar_from_notamc_to_notamn(var_notamn) AS varchar),';');
+		else
+			if length(charlie_buscar_from_notamc_to_notamr(var_notamn)) > 0
+			then
+				reemplazo=cast(charlie_buscar_from_notamc_to_notamr(var_notamn) as varchar);
+				acumulador=concat(acumulador, reemplazo, ';');
+
+				
+				while length(charlie_buscar_from_notamre_to_notamre(reemplazo)) > 0
+				loop
+					reemplazo=cast(charlie_buscar_from_notamre_to_notamre(reemplazo) as varchar);
+					acumulador=concat(acumulador, reemplazo, ';');
+				end loop;		
+				
+				if length(charlie_buscar_from_notamr_to_notamn(reemplazo)) > 0
+				then
+					acumulador=concat(var_notamn,';',acumulador, CAST(charlie_buscar_from_notamr_to_notamn(reemplazo) AS varchar), ';');
+				else
+					acumulador=concat(var_notamn,';',acumulador);
+				end if;
+			end if;
+			acumulador=concat(acumulador);
+		end if;
+		return acumulador;
+	end$$
+language plpgsql;
+
+select charlie_historico_from_notamc('(C9995/21 NOTAMC C9994/21');
+select charlie_historico_from_notamc('(C0230/21 NOTAMC C0229/21');
+
+##########################################################################################################################################
+
+
+
+/*--DE AQUI EN ADELANTE SE REALIZA PARA QUE BUSQUE DEL NOTAM REEMPLAZADO AL NOTAM CANCELADO HACIA ADELANTE--*/
+##########################################################################################################################################
+--CHARLIE-----HISTORIAL DE CHARLIE A PARTIR DEL NOTA REEMPLAZADO AL NOTAM CANCELADO
+
+create or replace function charlie_historico_from_notamr(var_notamn varchar)returns varchar as $$
+	declare cadena varchar;
+	declare acumulador varchar;
+	declare reemplazo varchar;
+	begin
+		acumulador='';
+		if length(charlie_buscar_from_notamr_to_notamc(var_notamn) )> 0 
+		then
+			acumulador=concat(var_notamn,';',CAST(charlie_buscar_from_notamr_to_notamc(var_notamn) AS varchar),';');
+		else
+			if length(charlie_buscar_from_notamr_to_notamr(var_notamn)) > 0
+			then
+				reemplazo=cast(charlie_buscar_from_notamr_to_notamr(var_notamn) as varchar);
+				acumulador=concat(acumulador, reemplazo, ';');
+
+				
+				while length(charlie_buscar_from_notamr_to_notamr(reemplazo)) > 0
+				loop
+					reemplazo=cast(charlie_buscar_from_notamr_to_notamr(reemplazo) as varchar);
+					acumulador=concat(acumulador, reemplazo, ';');
+				end loop;		
+				
+				if length(charlie_buscar_from_notamr_to_notamc(reemplazo)) > 0
+				then
+					acumulador=concat(var_notamn,';',acumulador, CAST(charlie_buscar_from_notamr_to_notamc(reemplazo) AS varchar), ';');
+				else
+					acumulador=concat(var_notamn,';',acumulador);
+				end if;
+			end if;
+			acumulador=concat(acumulador);
+		end if;
+		return acumulador;
+	end$$
+language plpgsql;
+
+select charlie_historico_from_notamr('(C9993/21 NOTAMR C9992/21');
+
+##########################################################################################################################################
+
+
+
+/*--DE AQUI EN ADELANTE SE REALIZA PARA QUE BUSQUE DEL NOTAM REEMPLAZADO AL NOTAM NUEVO HACIA ATRAS--*/
+##########################################################################################################################################
+--CHARLIE-----HISTORIAL DE CHARLIE A PARTIR DEL NOTAM REEMPLAZADO AL NOTAM NUEVO
+
+create or replace function charlie_historico_from_notamr2(var_notamn varchar)returns varchar as $$
+	declare cadena varchar;
+	declare acumulador varchar;
+	declare reemplazo varchar;
+	begin
+		acumulador='';
+		if length(charlie_buscar_from_notamr_to_notamn(var_notamn) )> 0 
+		then
+			acumulador=concat(var_notamn,';',CAST(charlie_buscar_from_notamr_to_notamn(var_notamn) AS varchar),';');
+		else
+			if length(charlie_buscar_from_notamc_to_notamr(var_notamn)) > 0
+			then
+				reemplazo=cast(charlie_buscar_from_notamc_to_notamr(var_notamn) as varchar);
+				acumulador=concat(acumulador, reemplazo, ';');
+
+				
+				while length(charlie_buscar_from_notamre_to_notamre(reemplazo)) > 0
+				loop
+					reemplazo=cast(charlie_buscar_from_notamre_to_notamre(reemplazo) as varchar);
+					acumulador=concat(acumulador, reemplazo, ';');
+				end loop;		
+				
+				if length(charlie_buscar_from_notamr_to_notamn(reemplazo)) > 0
+				then
+					acumulador=concat(var_notamn,';',acumulador,CAST(charlie_buscar_from_notamr_to_notamn(reemplazo) AS varchar), ';');
+				else
+					acumulador=concat(var_notamn,';',acumulador);
+				end if;
+			end if;
+			acumulador=concat(acumulador);
+		end if;
+		return acumulador;
+	end$$
+language plpgsql;
+
+select charlie_historico_from_notamr('(C9993/21 NOTAMR C9992/21') || '' ||
+charlie_historico_from_notamr2('(C9993/21 NOTAMR C9992/21')as columna
+
+##########################################################################################################################################
+
+
+
+
+
+
+/*--DE AQUI EN ADELANTE SE REALIZA PARA QUE BUSQUE DEL NOTAM NUEVO AL NOTAM CANCELADO--*/
+
+##########################################################################################################################################
+--ALPHA-----BUSCAR NOTAM DE REEMPLAZO A PARTIR DEL NOTAM NUEVO
+
+create or replace function alpha_buscar_from_notamn_to_notamr(var_notamn varchar)returns varchar as $$
+	declare cadena varchar;
+	begin
+		var_notamn = split_part(var_notamn,' ',1);
+		var_notamn = substring(var_notamn,2);
+		cadena := (
+		select distinct t2.idnotam 
+		from 
+			(select 
+				 distinct pac.idnotam, split_part(pac.idnotam,' ',3) as var_idnotam
+			 from 
+				 plan_vuelo_notam_trafico_alfa_repla pac
+			)as t2
+		where
+		t2.var_idnotam like var_notamn || '%'
+		);
+		if cadena is null 
+		then 
+			return '';
+		else
+			return cadena;
+		end if;
+	end
+$$ language plpgsql;
+
+select alpha_buscar_from_notamn_to_notamr('(C9990/21 NOTAMN');
+
+##########################################################################################################################################
+
+
+
+##########################################################################################################################################
+--ALPHA-----BUSCAR NOTAM DE REEMPLAZO A PARTIR DE UN NOTAM DE REEMPLAZO
+
+create or replace function alpha_buscar_from_notamr_to_notamr(var_notamr varchar)returns varchar as $$
+	declare cadena varchar;
+	begin
+		var_notamr = split_part(var_notamr,' ',1);
+		var_notamr = substring(var_notamr,2);
+		cadena := (
+		select distinct t3.idnotam 
+		from 
+			(select 
+				 distinct pac.idnotam, split_part(pac.idnotam,' ',3) as var_idnotam
+			 from 
+				 plan_vuelo_notam_trafico_alfa_repla pac
+			)as t3 
+		where
+		t3.var_idnotam like var_notamr || '%'
+		);
+		if cadena is null 
+		then 
+			return '';
+		else
+			return cadena;
+		end if;
+	end
+$$ language plpgsql;
+
+select alpha_buscar_from_notamr_to_notamr('(C9992/21 NOTAMR C9993/21');
+
+##########################################################################################################################################
+
+
+
+##########################################################################################################################################
+--ALPHA-----BUSCAR NOTAM DE CANCELADO A PARTIR DEL NOTAM DE REEMPLAZO
+
+create or replace function alpha_buscar_from_notamr_to_notamc(var_notamr varchar)returns varchar as $$
+	declare cadena varchar;
+	begin
+		var_notamr = split_part(var_notamr,' ',1);
+		var_notamr = substring(var_notamr,2);
+		
+		cadena := (
+		select distinct t1.idnotam 
+		from 
+			(select 
+				 distinct pac.idnotam, split_part(pac.idnotam,' ',3) as var_idnotam
+			 from 
+				 plan_vuelo_notam_trafico_alfa_cancel pac
+			)as t1 
+		where
+		t1.var_idnotam like var_notamr || '%'
+		);
+		if cadena is null 
+		then 
+			return '';
+		else
+			return cadena;
+		end if;
+	end
+$$ language plpgsql;
+
+select alpha_buscar_from_notamr_to_notamc('(C9994/21 NOTAMR C9993/21');
+
+##########################################################################################################################################
+
+
+
+##########################################################################################################################################
+--ALPHA-----BUSCAR NOTAM DE CANCELADO A PARTIR DEL NOTAM NUEVO
+
+create or replace function alpha_buscar_from_notamn_to_notamc(var_notamn varchar)returns varchar as $$
+	declare cadena varchar;
+	begin
+		var_notamn = split_part(var_notamn,' ',1);
+		var_notamn = substring(var_notamn,2);
+		cadena := (
+		select distinct t1.idnotam 
+		from 
+			(select 
+				 distinct pac.idnotam, split_part(pac.idnotam,' ',3) as var_idnotam
+			 from 
+				 plan_vuelo_notam_trafico_alfa_cancel pac
+			)as t1 
+		where
+		t1.var_idnotam like var_notamn || '%'
+		);
+		if cadena is null 
+		then 
+			return '';
+		else
+			return cadena;
+		end if;
+	end
+$$ language plpgsql;
+
+select alpha_buscar_from_notamn_to_notamc('(C0229/21 NOTAMN');
+
+##########################################################################################################################################
+
+
+
+##########################################################################################################################################
+--ALPHA-----HISTORIAL DE CHARLIE A PARTIR DEL NOTAM NUEVO
+
+create or replace function alpha_historico_from_notamn(var_notamn varchar)returns varchar as $$
+	declare cadena varchar;
+	declare acumulador varchar;
+	declare reemplazo varchar;
+	begin
+		acumulador='';
+		if length(alpha_buscar_from_notamn_to_notamc(var_notamn) )> 0 
+		then
+			acumulador=concat(var_notamn,';',CAST(alpha_buscar_from_notamn_to_notamc(var_notamn) AS varchar),';');
+		else
+			if length(alpha_buscar_from_notamn_to_notamr(var_notamn)) > 0
+			then
+				reemplazo=cast(alpha_buscar_from_notamn_to_notamr(var_notamn) as varchar);
+				acumulador=concat(acumulador, reemplazo, ';');
+
+				
+				while length(alpha_buscar_from_notamr_to_notamr(reemplazo)) > 0
+				loop
+					reemplazo=cast(alpha_buscar_from_notamr_to_notamr(reemplazo) as varchar);
+					acumulador=concat(acumulador, reemplazo, ';');
+				end loop;		
+				
+				if length(alpha_buscar_from_notamr_to_notamc(reemplazo)) > 0
+				then
+					acumulador=concat(var_notamn,';',acumulador, CAST(alpha_buscar_from_notamr_to_notamc(reemplazo) AS varchar),';');
+				else
+					acumulador=concat(var_notamn,';',acumulador);
+				end if;
+			end if;
+			acumulador=concat(acumulador);
+		end if;
+		return acumulador;
+	end$$
+language plpgsql;
+
+select alpha_historico_from_notamn('(C0229/21 NOTAMN');--nuevo a cancelado
+select alpha_historico_from_notamn('(C0248/21 NOTAMN');--nuevo a reemplazo
+select alpha_historico_from_notamn('(C9990/21 NOTAMN');--nuevo a reemplazo a cancelado
+
+##########################################################################################################################################
+
+
+
+/*--DE AQUI EN ADELANTE SE REALIZA PARA QUE BUSQUE DEL NOTAM CANCELADO AL NOTAM NUEVO--*/
+##########################################################################################################################################
+--ALPHA-----BUSCAR NOTAM NUEVO A PARTIR DEL NOTAM DE CANCELADO
+
+create or replace function alpha_buscar_from_notamc_to_notamn(var_notamc varchar)returns varchar as $$
+	declare cadena varchar;
+	begin
+		var_notamc = split_part(var_notamc,' ',3);
+		cadena := (
+		select distinct t1.idnotam 
+		from 
+			(select 
+				 distinct pac.idnotam, split_part(pac.idnotam,' ',1) as var_idnotam
+			 from 
+				 plan_vuelo_notam_trafico_alfa_new pac
+			)as t1 
+		where
+		t1.var_idnotam like '%' || var_notamc || '%'
+		);
+		if cadena is null 
+		then 
+			return '';
+		else
+			return cadena;
+		end if;
+	end
+$$ language plpgsql;
+
+select alpha_buscar_from_notamc_to_notamn('(C0230/21 NOTAMC C0229/21');
+
+##########################################################################################################################################
+
+
+
+##########################################################################################################################################
+--ALPHA-----BUSCAR NOTAM DE REEMPLAZO A PARTIR DEL NOTAM DE CANCELADO
+
+create or replace function alpha_buscar_from_notamc_to_notamr(var_notamr varchar)returns varchar as $$
+	declare cadena varchar;
+	begin
+		var_notamr = split_part(var_notamr,' ',3);
+		
+		cadena := (
+		select distinct t1.idnotam 
+		from 
+			(select 
+				 distinct pac.idnotam, split_part(pac.idnotam,' ',1) as var_idnotam
+			 from 
+				 plan_vuelo_notam_trafico_alfa_repla pac
+			)as t1 
+		where
+		t1.var_idnotam like '%' || var_notamr || '%'
+		);
+		if cadena is null 
+		then 
+			return '';
+		else
+			return cadena;
+		end if;
+	end
+$$ language plpgsql;
+
+select alpha_buscar_from_notamc_to_notamr('(C9994/21 NOTAMR C9993/21');
+
+##########################################################################################################################################
+
+
+
+##########################################################################################################################################
+--ALPHA-----BUSCAR NOTAM DE REEMPLAZO A PARTIR DEL NOTAM DE REEMPLAZO
+
+create or replace function alpha_buscar_from_notamre_to_notamre(var_notamr varchar)returns varchar as $$
+	declare cadena varchar;
+	begin
+		var_notamr = split_part(var_notamr,' ',3);
+		cadena := (
+		select distinct t3.idnotam 
+		from 
+			(select 
+				 distinct pac.idnotam, split_part(pac.idnotam,' ',1) as var_idnotam
+			 from 
+				 plan_vuelo_notam_trafico_alfa_repla pac
+			)as t3 
+		where
+		t3.var_idnotam like '%' || var_notamr || '%'
+		);
+		if cadena is null 
+		then 
+			return '';
+		else
+			return cadena;
+		end if;
+	end
+$$ language plpgsql;
+
+select alpha_buscar_from_notamre_to_notamre('(C9993/21 NOTAMR C9992/21');
+
+##########################################################################################################################################
+
+
+
+##########################################################################################################################################
+----ALPHA-----BUSCAR NOTAM NUEVO A PARTIR DEL NOTAM DE REEMPLAZO
+
+create or replace function alpha_buscar_from_notamr_to_notamn(var_notamn varchar)returns varchar as $$
+	declare cadena varchar;
+	begin
+		var_notamn = split_part(var_notamn,' ',3);
+		cadena := (
+		select distinct t2.idnotam 
+		from 
+			(select 
+				 distinct pac.idnotam, split_part(pac.idnotam,' ',1) as var_idnotam
+			 from 
+				 plan_vuelo_notam_trafico_alfa_new pac
+			)as t2
+		where
+		t2.var_idnotam like '%' || var_notamn || '%'
+		);
+		if cadena is null 
+		then 
+			return '';
+		else
+			return cadena;
+		end if;
+	end
+$$ language plpgsql;
+
+select alpha_buscar_from_notamr_to_notamn('(C9991/21 NOTAMR C9990/21');
+
+##########################################################################################################################################
+
+
+
+
+##########################################################################################################################################
+--ALPHA-----HISTORIAL DE ALPHA A PARTIR DEL NOTAM DE CANCELADO
+
+create or replace function alpha_historico_from_notamc(var_notamn varchar)returns varchar as $$
+
+	declare cadena varchar;
+	declare acumulador varchar;
+	declare reemplazo varchar;
+	begin
+		acumulador='';
+		if length(alpha_buscar_from_notamc_to_notamn(var_notamn) )> 0 
+		then
+			acumulador=concat(var_notamn,';',CAST(alpha_buscar_from_notamc_to_notamn(var_notamn) AS varchar),';');
+		else
+			if length(alpha_buscar_from_notamc_to_notamr(var_notamn)) > 0
+			then
+				reemplazo=cast(alpha_buscar_from_notamc_to_notamr(var_notamn) as varchar);
+				acumulador=concat(acumulador, reemplazo, ';');
+
+				
+				while length(alpha_buscar_from_notamre_to_notamre(reemplazo)) > 0
+				loop
+					reemplazo=cast(alpha_buscar_from_notamre_to_notamre(reemplazo) as varchar);
+					acumulador=concat(acumulador, reemplazo, ';');
+				end loop;		
+				
+				if length(alpha_buscar_from_notamr_to_notamn(reemplazo)) > 0
+				then
+					acumulador=concat(var_notamn,';',acumulador, CAST(alpha_buscar_from_notamr_to_notamn(reemplazo) AS varchar), ';');
+				else
+					acumulador=concat(var_notamn,';',acumulador);
+				end if;
+			end if;
+			acumulador=concat(acumulador);
+		end if;
+		return acumulador;
+	end$$
+language plpgsql;
+
+select charlie_historico_from_notamc('(C9995/21 NOTAMC C9994/21');
+select charlie_historico_from_notamc('(C0230/21 NOTAMC C0229/21');
+
+##########################################################################################################################################
+
+
+
+/*--DE AQUI EN ADELANTE SE REALIZA PARA QUE BUSQUE DEL NOTAM REEMPLAZADO AL NOTAM CANCELADO HACIA ADELANTE--*/
+##########################################################################################################################################
+--ALPHA-----HISTORIAL DE ALPHA A PARTIR DEL NOTA REEMPLAZADO AL NOTAM CANCELADO
+
+create or replace function alpha_historico_from_notamr(var_notamn varchar)returns varchar as $$
+	declare cadena varchar;
+	declare acumulador varchar;
+	declare reemplazo varchar;
+	begin
+		acumulador='';
+		if length(alpha_buscar_from_notamr_to_notamc(var_notamn) )> 0 
+		then
+			acumulador=concat(var_notamn,';',CAST(alpha_buscar_from_notamr_to_notamc(var_notamn) AS varchar),';');
+		else
+			if length(alpha_buscar_from_notamr_to_notamr(var_notamn)) > 0
+			then
+				reemplazo=cast(alpha_buscar_from_notamr_to_notamr(var_notamn) as varchar);
+				acumulador=concat(acumulador, reemplazo, ';');
+
+				
+				while length(alpha_buscar_from_notamr_to_notamr(reemplazo)) > 0
+				loop
+					reemplazo=cast(alpha_buscar_from_notamr_to_notamr(reemplazo) as varchar);
+					acumulador=concat(acumulador, reemplazo, ';');
+				end loop;		
+				
+				if length(alpha_buscar_from_notamr_to_notamc(reemplazo)) > 0
+				then
+					acumulador=concat(var_notamn,';',acumulador, CAST(alpha_buscar_from_notamr_to_notamc(reemplazo) AS varchar), ';');
+				else
+					acumulador=concat(var_notamn,';',acumulador);
+				end if;
+			end if;
+			acumulador=concat(acumulador);
+		end if;
+		return acumulador;
+	end$$
+language plpgsql;
+
+select alpha_historico_from_notamr('(C9993/21 NOTAMR C9992/21');
+
+##########################################################################################################################################
+
+
+
+/*--DE AQUI EN ADELANTE SE REALIZA PARA QUE BUSQUE DEL NOTAM REEMPLAZADO AL NOTAM NUEVO HACIA ATRAS--*/
+##########################################################################################################################################
+--ALPHA-----HISTORIAL DE ALPHA A PARTIR DEL NOTAM REEMPLAZADO AL NOTAM NUEVO
+
+create or replace function alpha_historico_from_notamr2(var_notamn varchar)returns varchar as $$
+	declare cadena varchar;
+	declare acumulador varchar;
+	declare reemplazo varchar;
+	begin
+		acumulador='';
+		if length(alpha_buscar_from_notamr_to_notamn(var_notamn) )> 0 
+		then
+			acumulador=concat(var_notamn,';',CAST(alpha_buscar_from_notamr_to_notamn(var_notamn) AS varchar),';');
+		else
+			if length(alpha_buscar_from_notamc_to_notamr(var_notamn)) > 0
+			then
+				reemplazo=cast(alpha_buscar_from_notamc_to_notamr(var_notamn) as varchar);
+				acumulador=concat(acumulador, reemplazo, ';');
+
+				
+				while length(alpha_buscar_from_notamre_to_notamre(reemplazo)) > 0
+				loop
+					reemplazo=cast(alpha_buscar_from_notamre_to_notamre(reemplazo) as varchar);
+					acumulador=concat(acumulador, reemplazo, ';');
+				end loop;		
+				
+				if length(alpha_buscar_from_notamr_to_notamn(reemplazo)) > 0
+				then
+					acumulador=concat(var_notamn,';',acumulador,CAST(alpha_buscar_from_notamr_to_notamn(reemplazo) AS varchar), ';');
+				else
+					acumulador=concat(var_notamn,';',acumulador);
+				end if;
+			end if;
+			acumulador=concat(acumulador);
+		end if;
+		return acumulador;
+	end$$
+language plpgsql;
+
+select alpha_historico_from_notamr('(C9993/21 NOTAMR C9992/21') || '' ||
+alpha_historico_from_notamr2('(C9993/21 NOTAMR C9992/21')as columna
+
+##########################################################################################################################################
