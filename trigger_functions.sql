@@ -982,3 +982,73 @@ select alpha_historico_from_notamr('(C9993/21 NOTAMR C9992/21') || '' ||
 alpha_historico_from_notamr2('(C9993/21 NOTAMR C9992/21')as columna
 
 ##########################################################################################################################################
+									  
+									     
+
+									     
+/*--DE AQUI EN ADELANTE MUESTRA EL CONTROL AUTOMATICO PIB--*/
+#####################################################################################################
+--CHARLIE-----CONTROL AUTOMATICO PIB
+
+create or replace function control_automatico_pib() returns void as
+$BODY$
+declare
+	reg RECORD;
+	cur_notam CURSOR FOR SELECT distinct tn.id_notam_pib FROM
+	(select id_notam_pib, split_part(id_notam_pib,' ',3)as codigo from plan_vuelo_pib_tiempo_real
+	where (id_notam_pib like '%NOTAMR%') OR (id_notam_pib like '%NOTAMC%')
+	)as t1
+	inner join
+	plan_vuelo_pib_tiempo_real as tn
+	on
+	tn.id_notam_pib like '(' || t1.codigo ||'%';
+	
+	BEGIN
+	for reg in cur_notam 
+	LOOP
+		if reg is null then
+		else
+			delete from plan_vuelo_pib_tiempo_real where id_notam_pib like reg.id_notam_pib;
+			update plan_vuelo_notam_trafico_charly_new set es_pib = 'false'
+			where idnotam like reg.id_notam_pib || '%';
+			update plan_vuelo_notam_trafico_charly_repla set es_pib = 'false' 
+			where idnotam like '%' || reg.id_notam_pib;
+		end if;
+		--raise notice 'Procesando %', reg.id_notam_pib; 
+	END LOOP;
+	return;
+end;
+$BODY$
+LANGUAGE 'plpgsql';
+select control_automatico_pib();
+
+#####################################################################################################
+
+
+
+
+/*--DE AQUI EN ADELANTE MUESTRA LA UNION DEL ID_NOTAM_PIB Y HORA_ACTUALIZACION--*/
+#####################################################################################################
+--CHARLIE-----UNION DE ID_NOTAM_PIB Y HORA_ACTUALIZACION
+
+drop function union_de_notams();
+create or replace function union_de_notams() returns varchar as 
+$BODY$
+	DECLARE
+	reg RECORD;
+	cur_notams CURSOR FOR SELECT (id_notam_pib,hora_actualizacion)as notam from
+	plan_vuelo_pib_tiempo_real order by id_notam_pib;
+	cadena varchar;
+	BEGIN
+		cadena:='';
+		for reg in cur_notams loop 
+			cadena := cadena || reg.notam || ';';
+		end loop;
+		return cadena;
+	end;
+$BODY$
+LANGUAGE 'plpgsql';
+
+select union_de_notams();
+
+#####################################################################################################
