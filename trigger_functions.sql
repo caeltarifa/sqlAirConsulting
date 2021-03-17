@@ -1029,10 +1029,11 @@ select control_automatico_pib();
 
 /*--DE AQUI EN ADELANTE MUESTRA LA UNION DEL ID_NOTAM_PIB Y HORA_ACTUALIZACION--*/
 #####################################################################################################
---CHARLIE-----UNION DE ID_NOTAM_PIB Y HORA_ACTUALIZACION
+--CHARLIE-----CONCATENACION DE CADENAS ID_NOTAM_PIB DE LA TABLA PIB_TIEMPO_REAL Y HORA_ACTUALIZACION
 
-drop function union_de_notams();
-create or replace function union_de_notams() returns varchar as 
+
+drop function documentacion_notam_pib();
+create or replace function documentacion_notam_pib() returns varchar as 
 $BODY$
 	DECLARE
 	reg RECORD;
@@ -1048,7 +1049,5 @@ $BODY$
 	end;
 $BODY$
 LANGUAGE 'plpgsql';
-
-select union_de_notams();
-
+select documentacion_notam_pib();
 #####################################################################################################
