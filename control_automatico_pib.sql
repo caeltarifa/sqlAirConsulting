@@ -29,9 +29,13 @@ declare
 		end if;
 		--raise notice 'Procesando %', reg.id_notam_pib; 
 	END LOOP;
+	
+	--ACTUALIZAMOS EL DOCUMENTO DE REGISTRO PIB EN LA BASE DE DATOS, REGISTRANDO LA ULTIMA MODIFICACION
+	insert into aro_ais_historico_pib (lista_notam, fecha_modificado) values ( documentacion_notam_pib(), current_timestamp);
 	return NEW;
 end;
 $control_automatico_pib$ LANGUAGE 'plpgsql';
+
 ''' --------------------------------------------------------------TRIGGER AFTER INSERT en pib_tiempo_real, verifica si es CANCEL o REPLACE y actualiza el PIB -----------------------------------------------------------------------------------------------'''
 DROP TRIGGER IF EXISTS control_automatico_pib 
 ON plan_vuelo_pib_tiempo_real  CASCADE  ;
@@ -39,6 +43,13 @@ ON plan_vuelo_pib_tiempo_real  CASCADE  ;
 CREATE TRIGGER control_automatico_pib AFTER INSERT 
     ON plan_vuelo_pib_tiempo_real 
 	FOR EACH ROW EXECUTE PROCEDURE control_automatico_pib();	
+	
+--ACTUALIZAMOS EL DOCUMENTO DE REGISTRO PIB EN LA BASE DE DATOS, REGISTRANDO LA ULTIMA MODIFICACION
+CREATE TRIGGER control_automatico_pib_before_delete BEFORE DELETE
+    ON plan_vuelo_pib_tiempo_real 
+	FOR EACH ROW EXECUTE PROCEDURE control_automatico_pib();	
+
+
 '''-------------------------------EJEMPLO----'''
 insert into plan_vuelo_pib_tiempo_real (id_notam_pib, hora_actualizacion) values ('(CPRU1/21 NOTAMR C0362/21',current_timestamp)
 insert into plan_vuelo_pib_tiempo_real (id_notam_pib, hora_actualizacion) values ('(CPRU2/21 NOTAMR CPRU1/21',current_timestamp)
