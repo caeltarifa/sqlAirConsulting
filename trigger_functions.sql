@@ -102,11 +102,12 @@ CREATE OR REPLACE FUNCTION proteger_datos_pib() RETURNS TRIGGER AS $proteger_dat
   END;
 $proteger_datos_pib$ LANGUAGE plpgsql;
 
-DROP TRIGGER IF EXISTS proteger_datos_pib 
-ON plan_vuelo_notam_trafico_resumen CASCADE  ;
-CREATE TRIGGER proteger_datos_pib AFTER INSERT 
-    ON plan_vuelo_notam_trafico_resumen 
-	FOR EACH ROW EXECUTE PROCEDURE proteger_datos_pib();
+
+CREATE TRIGGER controlar_automaticamente_pib
+    AFTER INSERT
+    ON public.plan_vuelo_notam_trafico_resumen
+    FOR EACH ROW
+    EXECUTE PROCEDURE public.control_automatico_pib();
 	
 						     
 
